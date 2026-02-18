@@ -1,0 +1,45 @@
+version: '3.9'
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.1.10
+    command: ["redpanda","start","--overprovisioned","--smp","1","--memory","1G","--reserve-memory","0M","--node-id","0","--check=false","--kafka-addr","PLAINTEXT://0.0.0.0:9092","--advertise-kafka-addr","PLAINTEXT://redpanda:9092"]
+    ports: ["9092:9092"]
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: playground
+    ports: ["5432:5432"]
+  users-service:
+    build: ./services/users-service
+    environment:
+      PORT: "8081"
+      KAFKA_BROKER: redpanda:9092
+    depends_on: [redpanda]
+    ports: ["8081:8081"]
+  payments-service:
+    build: ./services/payments-service
+    environment:
+      PORT: "8082"
+      KAFKA_BROKER: redpanda:9092
+      POSTGRES_DSN: postgres://postgres:postgres@postgres:5432/playground?sslmode=disable
+    depends_on: [redpanda, postgres]
+    ports: ["8082:8082"]
+  notifications-service:
+    build: ./services/notifications-service
+    environment:
+      KAFKA_BROKER: redpanda:9092
+      REDIS_ADDR: redis:6379
+    depends_on: [redpanda, redis]
+  api-gateway:
+    build: ./services/api-gateway
+    environment:
+      PORT: "8090"
+      USERS_BASE_URL: http://users-service:8081
+      PAYMENTS_BASE_URL: http://payments-service:8082
+    depends_on: [users-service, payments-service]
+    ports: ["8090:8090"]
